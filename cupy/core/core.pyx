@@ -16,9 +16,11 @@ cimport cython
 from libcpp cimport vector
 
 from cupy.core cimport internal
+from cupy.cuda cimport common
 from cupy.cuda cimport cublas
 from cupy.cuda cimport runtime
 from cupy.cuda cimport memory
+from cupy.cuda cimport thrust
 
 
 DEF MAX_NDIM = 25
@@ -651,7 +653,69 @@ cdef class ndarray:
 
         return out
 
-    # TODO(okuta): Implement sort
+    cpdef sort(self):
+        """Sort an array, in-place with a stable sorting algorithm.
+
+        .. note::
+           For its implementation reason, ``ndarray.sort`` currently supports
+           only arrays with their rank of one and their own data, and does not
+           support ``axis``, ``kind`` and ``order`` parameters that
+           ``numpy.ndarray.sort`` does support.
+
+        .. seealso::
+            :func:`cupy.sort` for full documentation,
+            :meth:`numpy.ndarray.sort`
+
+        """
+
+        # TODO(takagi): Support axis argument.
+        # TODO(takagi): Support kind argument.
+        cdef void* ptr
+        cdef Py_ssize_t n
+
+        if self.shape == ():
+            msg = 'Sorting arrays with the rank of zero is not supported'
+            raise ValueError(msg)
+
+        # TODO(takagi): Support ranks of two or more
+        if len(self.shape) > 1:
+            msg = ('Sorting arrays with the rank of two or more is '
+                   'not supported')
+            raise ValueError(msg)
+
+        # TODO(takagi): Support sorting views
+        if self.base is not None:
+            raise ValueError('Sorting views is not supported')
+
+        ptr = <void *>self.data.ptr
+        n = <Py_ssize_t>self.shape[0]
+
+        # TODO(takagi): Support float16 and bool
+        dtype = self.dtype
+        if dtype == numpy.int8:
+            thrust.sort[common.cpy_byte](ptr, n)
+        elif dtype == numpy.uint8:
+            thrust.sort[common.cpy_ubyte](ptr, n)
+        elif dtype == numpy.int16:
+            thrust.sort[common.cpy_short](ptr, n)
+        elif dtype == numpy.uint16:
+            thrust.sort[common.cpy_ushort](ptr, n)
+        elif dtype == numpy.int32:
+            thrust.sort[common.cpy_int](ptr, n)
+        elif dtype == numpy.uint32:
+            thrust.sort[common.cpy_uint](ptr, n)
+        elif dtype == numpy.int64:
+            thrust.sort[common.cpy_long](ptr, n)
+        elif dtype == numpy.uint64:
+            thrust.sort[common.cpy_ulong](ptr, n)
+        elif dtype == numpy.float32:
+            thrust.sort[common.cpy_float](ptr, n)
+        elif dtype == numpy.float64:
+            thrust.sort[common.cpy_double](ptr, n)
+        else:
+            msg = "Sorting arrays with dtype '{}' is not supported"
+            raise TypeError(msg.format(dtype))
+
     # TODO(okuta): Implement argsort
     # TODO(okuta): Implement partition
     # TODO(okuta): Implement argpartition
